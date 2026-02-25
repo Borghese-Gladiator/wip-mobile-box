@@ -7,6 +7,7 @@ Everything on:  PID motors, wheel slip, sensors/EKF, BLE, obstacles
 This is equivalent to simulation_full.py.
 """
 
+import numpy as np
 import matplotlib.pyplot as plt
 
 from robot import World
@@ -21,6 +22,11 @@ a = make_robot_artists(ax, with_ekf=True)
 for obs in world.obstacles.obstacles:
     ax.add_patch(plt.Circle(obs, world.obstacles.radius, color="red", alpha=0.25))
     ax.add_patch(plt.Circle(obs, 0.15, color="red", alpha=0.8))
+
+step_label = ax.text(
+    0.02, 0.02, "step: 0", transform=ax.transAxes,
+    color="white", fontsize=9, va="bottom", ha="left",
+)
 
 
 def animate(frame):
@@ -41,8 +47,7 @@ def animate(frame):
     draw_fading_trail(ax, world.trail_true, "orange")
     draw_fading_trail(ax, world.trail_est,  "cyan")
 
-    for obs in world.obstacles.obstacles:
-        ax.add_patch(plt.Circle(obs, world.obstacles.radius, color="red", alpha=0.25))
+    step_label.set_text(f"step: {frame}")
 
     return a["robot_body"], a["heading_line"], a["robot_est_dot"], a["phone_dot"]
 

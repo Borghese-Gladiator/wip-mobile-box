@@ -62,6 +62,9 @@ fig, ax = make_fig("01 — Pure Follow Controller")
 world = World()
 a = make_robot_artists(ax)
 
+step_label = ax.text(0.02, 0.02, "step: 0", transform=ax.transAxes,
+                     color="white", fontsize=9, va="bottom", ha="left")
+
 
 def animate(frame):
     world.step()
@@ -78,6 +81,7 @@ def animate(frame):
     clear_collections(ax)
     draw_fading_trail(ax, world.trail, "orange")
 
+    step_label.set_text(f"step: {frame}")
     return a["robot_body"], a["heading_line"], a["phone_dot"]
 
 

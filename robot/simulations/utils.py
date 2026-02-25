@@ -44,11 +44,35 @@ def make_robot_artists(ax, *, with_ekf: bool = False):
     return artists
 
 
+"""
+> REMOVED naive implementation due to performance issues (O(n))
+ax.scatter() calls per frame, each creating a new PathCollection.
+With a 300-point trail this added 300 objects to ax.collections every
+frame; clear_collections() removed them but the loop itself was also O(n), making each
+frame O(n) and the overall animation feel exponentially slower over time.
+
 def draw_fading_trail(ax, trail, color):
-    """Scatter a trail list of [x, y, ...] arrays with increasing alpha."""
     n = len(trail)
     for i, p in enumerate(trail):
         ax.scatter(p[0], p[1], s=4, color=color, alpha=i / max(n, 1))
+"""
+
+def draw_fading_trail(ax, trail, color):
+    """
+    Scatter a trail list of [x, y, ...] arrays with increasing alpha.
+
+    Single ax.scatter() call with per-point RGBA colors — O(1) artists per frame
+    regardless of trail length.
+    """
+    if not trail:
+        return
+    import matplotlib.colors as mcolors
+    xs = [p[0] for p in trail]
+    ys = [p[1] for p in trail]
+    n = len(trail)
+    r, g, b = mcolors.to_rgb(color)
+    rgba = [(r, g, b, i / n) for i in range(n)]
+    ax.scatter(xs, ys, s=4, c=rgba)
 
 
 def clear_collections(ax):
@@ -60,7 +84,8 @@ def clear_collections(ax):
 def run(animate_fn, dt: float):
     """Wire up FuncAnimation and block on plt.show()."""
     fig = plt.gcf()
-    FuncAnimation(fig, animate_fn, interval=int(dt * 1000),
-                  blit=False, cache_frame_data=False)
+    anim = FuncAnimation(fig, animate_fn, interval=int(dt * 1000),
+                         blit=False, cache_frame_data=False)
+    fig._anim = anim  # keep reference alive
     plt.tight_layout()
     plt.show()

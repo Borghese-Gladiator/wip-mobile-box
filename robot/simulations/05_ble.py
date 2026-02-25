@@ -9,6 +9,8 @@ The robot holds its last good command when packets drop.
 Watch the robot overshoot corners as stale commands arrive late.
 """
 
+import numpy as np
+
 from robot.robot import Robot
 from robot.phone import Phone
 from simulations.utils import make_fig, make_robot_artists, draw_fading_trail, clear_collections, run
@@ -46,6 +48,9 @@ fig, ax = make_fig("05 — BLE Latency + Packet Drops")
 world = World()
 a = make_robot_artists(ax, with_ekf=True)
 
+step_label = ax.text(0.02, 0.02, "step: 0", transform=ax.transAxes,
+                     color="white", fontsize=9, va="bottom", ha="left")
+
 
 def animate(frame):
     world.step()
@@ -65,6 +70,7 @@ def animate(frame):
     draw_fading_trail(ax, world.trail_true, "orange")
     draw_fading_trail(ax, world.trail_est,  "cyan")
 
+    step_label.set_text(f"step: {frame}")
     return a["robot_body"], a["heading_line"], a["robot_est_dot"], a["phone_dot"]
 
 

@@ -42,6 +42,6 @@ class ObstacleField:
         angle_error = wrap_angle(desired_angle - robot.true_state[2])
 
         # Translate to differential drive: turn toward safe direction
-        delta_w = 2.0 * angle_error
-        delta_v = -0.5 * np.linalg.norm(force)  # slow down near obstacles
+        delta_w = np.clip(2.0 * angle_error, -2.0, 2.0)
+        delta_v = np.clip(-0.5 * np.linalg.norm(force), -1.0, 0.0)  # slow down only, no hard reverse
         return delta_v, delta_w

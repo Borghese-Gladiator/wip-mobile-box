@@ -37,7 +37,7 @@ class World:
         else:
             desired_angle = np.arctan2(error[1], error[0])
             angle_error = wrap_angle(desired_angle - pose[2])
-            v_cmd = Phone.Kp_DIST * dist
+            v_cmd = min(Phone.Kp_DIST * dist, Phone.MAX_V_CMD)
             w_cmd = Phone.Kp_ANGLE * angle_error
 
         # PID motor update (velocity ramps, not instant)
@@ -60,6 +60,9 @@ fig, ax = make_fig("02 — PID Motor Control")
 world = World()
 a = make_robot_artists(ax)
 
+step_label = ax.text(0.02, 0.02, "step: 0", transform=ax.transAxes,
+                     color="white", fontsize=9, va="bottom", ha="left")
+
 
 def animate(frame):
     world.step()
@@ -76,6 +79,7 @@ def animate(frame):
     clear_collections(ax)
     draw_fading_trail(ax, world.trail, "orange")
 
+    step_label.set_text(f"step: {frame}")
     return a["robot_body"], a["heading_line"], a["phone_dot"]
 
 

@@ -40,7 +40,7 @@ class World:
         else:
             desired_angle = np.arctan2(error[1], error[0])
             angle_error = wrap_angle(desired_angle - est[2])
-            v_cmd = Phone.Kp_DIST * dist
+            v_cmd = min(Phone.Kp_DIST * dist, Phone.MAX_V_CMD)
             w_cmd = Phone.Kp_ANGLE * angle_error
 
         self.robot.set_velocity_command(v_cmd, w_cmd)
@@ -58,6 +58,9 @@ class World:
 fig, ax = make_fig("04 — Noisy Sensors + EKF")
 world = World()
 a = make_robot_artists(ax, with_ekf=True)
+
+step_label = ax.text(0.02, 0.02, "step: 0", transform=ax.transAxes,
+                     color="white", fontsize=9, va="bottom", ha="left")
 
 
 def animate(frame):
@@ -78,6 +81,7 @@ def animate(frame):
     draw_fading_trail(ax, world.trail_true, "orange")
     draw_fading_trail(ax, world.trail_est,  "cyan")
 
+    step_label.set_text(f"step: {frame}")
     return a["robot_body"], a["heading_line"], a["robot_est_dot"], a["phone_dot"]
 
 

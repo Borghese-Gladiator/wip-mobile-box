@@ -16,6 +16,7 @@ class Phone:
     Kp_ANGLE = 3.0
     PATH_RADIUS = 4.0
     PATH_SPEED = 0.3
+    MAX_V_CMD = 1.0  # half of Robot.MAX_SPEED, leaves headroom for w_cmd differential
 
     def __init__(self, dt):
         self.time = 0.0
@@ -50,7 +51,7 @@ class Phone:
         desired_angle = np.arctan2(error[1], error[0])
         angle_error = wrap_angle(desired_angle - robot_estimated_pose[2])
 
-        v = self.Kp_DIST * dist
+        v = min(self.Kp_DIST * dist, self.MAX_V_CMD)
         w = self.Kp_ANGLE * angle_error
         return v, w
 

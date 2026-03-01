@@ -20,3 +20,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 package-mode = true
 packages = [{include = "robot_follower", from = "src"}]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^9.0.2"
+

@@ -103,6 +103,30 @@ assertion was corrected to `abs(w) ≈ 3π` to be implementation-agnostic.
 
 ---
 
+### 2026-03-01 — Extract EKF + TDD for EKF and PotentialField
+
+#### What changed
+- Extracted EKF from `_SimRobot` in `app/main.py` into `estimation/ekf.py`
+  as a standalone `EKF` class with `predict`, `update_gps`, `update_imu`.
+- `_SimRobot.ekf_step` now delegates to `EKF`; all simulation behaviour
+  is identical.
+- **Bug fixed in EKF:** `update_imu` was not wrapping `theta` after the
+  Kalman correction, allowing it to drift outside `(-π, π]`. Fixed by
+  calling `_wrap(self.x[2])` after the state update. Caught by
+  `test_imu_update_wraps_angle_error`.
+
+#### TDD implemented
+Two new test files written to lock in behavioral contracts:
+
+| Module | Test file | Cases | Notable findings |
+|---|---|---|---|
+| `estimation/ekf.py` | `test_ekf.py` | 15 | Caught missing `_wrap` after `update_imu`; clarified that x,y can shift slightly via off-diagonal covariance coupling during IMU update |
+| `perception/obstacles.py` — `PotentialFieldObstacles` | `test_potential_field.py` | 12 | Confirmed boundary condition (`<` not `<=`), dv clamp, dw clamp, direction sign, force superposition |
+
+**Total: 104 tests, all passing.**
+
+---
+
 ## Next steps
 
 - [ ] **Wire LiDAR into the control loop** — `LidarDriver.read_scan()` →
@@ -115,10 +139,8 @@ assertion was corrected to `abs(w) ≈ 3π` to be implementation-agnostic.
 - [ ] **Implement `CameraDriver.read_frame()`** — picamera2 or OpenCV capture.
 - [ ] **Implement `PersonTracker.update_from_frame()`** — MediaPipe Pose or
   YOLOv8-pose; output real `PersonTarget` with position + confidence.
-- [ ] **Extract EKF** — move `_SimRobot.ekf_step` into `estimation/ekf.py`;
-  replace simulated GPS update with encoder odometry from `DiffDriveOdometry`.
-- [ ] **Add `test_ekf.py`** — TDD for the extracted EKF module (predict step,
-  GPS update, IMU update, covariance growth).
-- [ ] **Add `test_potential_field.py`** — TDD for `PotentialFieldObstacles`
-  (robot inside influence radius gets repulsion, outside gets zero, force
-  direction is away from obstacle).
+- [ ] **Replace simulated GPS in EKF** — `update_gps` currently receives noisy
+  simulated GPS. On hardware, replace with encoder odometry from
+  `DiffDriveOdometry` or UWB ranging. Consider renaming to `update_position`.
+- [ ] **Add `test_ekf_odometry.py`** — TDD for EKF fusing encoder odometry
+  instead of GPS (different noise characteristics, no absolute position).

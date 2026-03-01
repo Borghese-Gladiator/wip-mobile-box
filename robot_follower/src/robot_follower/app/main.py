@@ -15,6 +15,7 @@ from ..behaviors.arbiter import Arbiter
 from ..control.diff_drive import DiffDriveKinematics
 from ..control.limits import AccelLimiter
 from ..perception.obstacles import PotentialFieldObstacles
+from ..estimation.ekf import EKF
 from .logging import get_logger
 
 log = get_logger(__name__)
@@ -45,12 +46,7 @@ class _SimRobot:
         # Simple P controllers stand in for full PID to reduce imports
         self._kp = 8.0
 
-        # EKF state
-        self._ekf_x = self.true_state.copy()
-        self._ekf_P = np.eye(3) * 0.5
-        self._Q = np.eye(3) * 0.01
-        self._R_gps = np.eye(2) * 0.5
-        self._R_imu = np.array([[0.05]])
+        self._ekf = EKF(initial_state=[x, y, theta])
         self._gps_bias = np.zeros(2)
 
     # -- command --
@@ -93,39 +89,13 @@ class _SimRobot:
     # -- EKF --
 
     def ekf_step(self, v: float, w: float, dt: float) -> None:
-        # Predict
-        th = self._ekf_x[2]
-        self._ekf_x[0] += v * math.cos(th) * dt
-        self._ekf_x[1] += v * math.sin(th) * dt
-        self._ekf_x[2] = (self._ekf_x[2] + w * dt + math.pi) % (2 * math.pi) - math.pi
-        F = np.array([
-            [1, 0, -v * math.sin(th) * dt],
-            [0, 1,  v * math.cos(th) * dt],
-            [0, 0,  1],
-        ])
-        self._ekf_P = F @ self._ekf_P @ F.T + self._Q
-
-        # GPS update
-        z_gps = self._read_gps()
-        H = np.array([[1, 0, 0], [0, 1, 0]])
-        y = z_gps - self._ekf_x[:2]
-        S = H @ self._ekf_P @ H.T + self._R_gps
-        K = self._ekf_P @ H.T @ np.linalg.inv(S)
-        self._ekf_x += K @ y
-        self._ekf_P = (np.eye(3) - K @ H) @ self._ekf_P
-
-        # IMU update
-        z_imu = self._read_imu()
-        H2 = np.array([[0, 0, 1]])
-        y2 = (z_imu - self._ekf_x[2] + math.pi) % (2 * math.pi) - math.pi
-        S2 = H2 @ self._ekf_P @ H2.T + self._R_imu
-        K2 = self._ekf_P @ H2.T @ np.linalg.inv(S2)
-        self._ekf_x += K2.flatten() * y2
-        self._ekf_P = (np.eye(3) - K2 @ H2) @ self._ekf_P
+        self._ekf.predict(v, w, dt)
+        self._ekf.update_gps(self._read_gps())
+        self._ekf.update_imu(self._read_imu())
 
     @property
     def estimated_pose(self) -> np.ndarray:
-        return self._ekf_x.copy()
+        return self._ekf.x.copy()
 
 
 class _SimPhone:

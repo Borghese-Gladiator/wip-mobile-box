@@ -54,3 +54,71 @@
   Fuses simulated GPS + IMU. On hardware, replace the GPS update with encoder
   odometry (dead reckoning) and optionally UWB; keep IMU update but read from
   real hardware. Consider extracting EKF into its own `estimation/ekf.py` module.
+
+---
+
+## Changelog
+
+### 2026-03-01 — Package restructure + TDD test suite
+
+#### What changed
+- Renamed and restructured `robot/` into `robot_follower/` with a layered
+  architecture: `types`, `drivers`, `estimation`, `perception`, `behaviors`,
+  `control`, `app`.
+- Extracted all magic numbers into `config/robot.yaml`, `config/follow.yaml`,
+  `config/avoid.yaml`.
+- Ported simulation logic (`World`, `_SimRobot`, `_SimPhone`) into
+  `app/main.py`.
+- Added hardware-stub drivers: `motor_driver.py`, `encoder_driver.py`,
+  `lidar_driver.py`, `camera_driver.py` — all `pass` / `return None`.
+- Added `estimation/odom.py` (`DiffDriveOdometry`) and
+  `perception/obstacles.py` (`sectorize`, `PotentialFieldObstacles`).
+- Added `control/diff_drive.py` (`DiffDriveKinematics`) and
+  `control/limits.py` (`AccelLimiter`).
+
+#### TDD implemented
+The following modules were written with tests **before** or alongside
+implementation to lock in their behavioral contract:
+
+| Module | Test file | Cases |
+|---|---|---|
+| `control/diff_drive.py` | `test_diff_drive.py` | 16 — forward kinematics, inverse kinematics, clamping, roundtrip |
+| `control/limits.py` | `test_limits.py` | 11 — single-step clamp, ramp, decel, reset |
+| `estimation/odom.py` | `test_odom.py` | 13 — straight, arc, spin, angle wrap, multi-step, velocity output |
+| `perception/obstacles.py` — `sectorize` | `test_sectorize.py` | 10 — sector routing, boundary membership, minimum selection, empty scan |
+
+#### Tests rewritten (existing files, upgraded from smoke tests to contracts)
+
+| File | Before | After | Key additions |
+|---|---|---|---|
+| `test_follow.py` | 3 cases, sign checks only | 8 cases, exact v+w | Speed cap, angle cases, rotated robot, behind-target wrap |
+| `test_avoid.py` | 3 cases, `v < 0` only | 9 cases, exact v+w | Turn direction (left/right), turn_bias scaling, all boundaries |
+| `test_arbiter.py` | 4 cases | 9 cases | Negative v clamp, angular clamp ±, estop boundary (== and just above) |
+
+**Total: 77 tests, all passing.**
+
+One notable fix during the run: `test_target_directly_behind` revealed that
+`wrap(π)` returns `−π` in floating-point (the ±π boundary is ambiguous). The
+assertion was corrected to `abs(w) ≈ 3π` to be implementation-agnostic.
+
+---
+
+## Next steps
+
+- [ ] **Wire LiDAR into the control loop** — `LidarDriver.read_scan()` →
+  `sectorize()` → `ObstacleSectors` → `AvoidBehavior` + `Arbiter`. Currently
+  `ObstacleSectors` is always empty so avoidance never fires.
+- [ ] **Implement `MotorDriver._write()`** — choose PWM vs serial protocol for
+  the target motor controller IC, write bytes to GPIO/UART.
+- [ ] **Implement `EncoderDriver.read_ticks()`** — attach GPIO interrupt
+  handlers (RPi.GPIO or pigpio) that count pulses.
+- [ ] **Implement `CameraDriver.read_frame()`** — picamera2 or OpenCV capture.
+- [ ] **Implement `PersonTracker.update_from_frame()`** — MediaPipe Pose or
+  YOLOv8-pose; output real `PersonTarget` with position + confidence.
+- [ ] **Extract EKF** — move `_SimRobot.ekf_step` into `estimation/ekf.py`;
+  replace simulated GPS update with encoder odometry from `DiffDriveOdometry`.
+- [ ] **Add `test_ekf.py`** — TDD for the extracted EKF module (predict step,
+  GPS update, IMU update, covariance growth).
+- [ ] **Add `test_potential_field.py`** — TDD for `PotentialFieldObstacles`
+  (robot inside influence radius gets repulsion, outside gets zero, force
+  direction is away from obstacle).

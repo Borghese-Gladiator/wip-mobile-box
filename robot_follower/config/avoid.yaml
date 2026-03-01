@@ -1,0 +1,19 @@
+# Obstacle avoidance parameters
+
+# Sector layout (degrees, measured from robot forward = 0)
+sectors:
+  front: [-30, 30]
+  front_left: [30, 90]
+  front_right: [-90, -30]
+  rear: [150, -150]        # wraps through ±180
+
+# Stop / slow distances (metres)
+stop_distance: 0.4         # hard stop if obstacle closer than this
+slow_distance: 1.0         # begin slowing down
+
+# Potential-field repulsion (costfield)
+repulsion_strength: 3.0
+influence_radius_factor: 2.0   # multiples of obstacle radius
+
+# Turn bias when obstacle is directly ahead
+turn_bias: 1.0             # positive = prefer turning right

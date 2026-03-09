@@ -15,7 +15,12 @@ from .mujoco_noise import MotorNoise, IMUNoise, EncoderNoise
 
 
 class SimRobotIO(RobotIO):
-    """Concrete RobotIO backed by MuJoCo, with noise injection."""
+    """Concrete RobotIO backed by MuJoCo, with noise injection.
+
+    Sensor reads that depend on pose (target, obstacles) use the estimated
+    pose passed in, not ground truth. The controller never sees the true
+    MuJoCo state.
+    """
 
     def __init__(
         self,
@@ -33,11 +38,13 @@ class SimRobotIO(RobotIO):
         self._encoder_noise = EncoderNoise()
         self._sim_dt = model.opt.timestep
 
-    def read_pose(self) -> Pose2D:
+    # --- Ground truth (sim-level only, not exposed to controller) ---
+
+    def get_true_pose(self) -> Pose2D:
+        """Ground-truth pose — for sim-level goal checks only, not the controller."""
         return self._robot.get_pose()
 
-    def read_velocity(self) -> Twist2D:
-        return self._robot.get_velocity()
+    # --- RobotIO interface ---
 
     def read_wheels(self) -> WheelState:
         left_spd, right_spd = self._robot.get_wheel_speeds()
@@ -54,13 +61,23 @@ class SimRobotIO(RobotIO):
         noisy_gz = self._imu_noise.apply(vel.angular, self._sim_dt)
         return IMUReading(gyro_z=noisy_gz, timestamp=self._data.time)
 
-    def read_target(self) -> TargetMeasurement:
-        pose = self._robot.get_pose()
-        return self._ble_tracker.read(pose.x, pose.y, pose.yaw, self._data.time)
+    def read_target(self, estimated_pose: Pose2D) -> TargetMeasurement:
+        """BLE target sensing uses the estimated pose, not ground truth."""
+        return self._ble_tracker.read(
+            estimated_pose.x, estimated_pose.y, estimated_pose.yaw,
+            self._data.time,
+        )
 
-    def read_obstacles(self) -> ObstacleMeasurement:
-        pose = self._robot.get_pose()
-        return self._range_sensors.read(pose.x, pose.y, pose.yaw)
+    def read_obstacles(self, estimated_pose: Pose2D) -> ObstacleMeasurement:
+        """Raycast from the estimated pose, not ground truth.
+
+        Note: MuJoCo raycasts from a world-space origin, so small pose
+        estimation errors will shift where rays originate — matching how
+        a real robot's sensor frame drifts with odometry error.
+        """
+        return self._range_sensors.read(
+            estimated_pose.x, estimated_pose.y, estimated_pose.yaw,
+        )
 
     def send_wheel_command(self, cmd: WheelCommand) -> None:
         left, right = self._motor_noise.apply(cmd.left, cmd.right, self._sim_dt)

@@ -9,9 +9,10 @@ from pathlib import Path
 import mujoco
 import mujoco.viewer
 
-from robot_follower.core.config import load_config, merge_configs
+from robot_follower.core.config import load_config
 from robot_follower.core.types import BehaviorState
 from robot_follower.core.math_utils import distance_2d
+from robot_follower.core.estimator import StateEstimator
 from robot_follower.core.follower_controller import FollowerController
 from robot_follower.core.obstacle_avoidance import ObstacleAvoidance
 from robot_follower.core.wheel_controller import WheelController
@@ -32,7 +33,15 @@ def run_simulation(config: dict, gui: bool = False, verbose: bool = True) -> boo
     rc = config["robot"]
     bc = config["behavior"]
     io = SimRobotIO(model, data, config)
-    target = MuJoCoTarget(model, data, config)
+    target_mover = MuJoCoTarget(model, data, config)
+
+    # State estimator — the controller's only source of self-knowledge
+    estimator = StateEstimator(
+        wheel_radius=rc["wheel_radius"],
+        wheelbase=rc["wheelbase"],
+    )
+    # Seed estimator with the initial ground-truth pose (like a GPS fix at boot)
+    estimator.reset(io.get_true_pose())
 
     follower = FollowerController(base_speed=3.0, steering_gain=6.0)
     avoidance = ObstacleAvoidance(base_speed=3.0)
@@ -54,14 +63,16 @@ def run_simulation(config: dict, gui: bool = False, verbose: bool = True) -> boo
     max_steps = config["simulation"]["max_steps"]
     sim_dt = model.opt.timestep
     control_every = 20  # ~50 Hz at 1 kHz physics
+    control_dt = sim_dt * control_every
     report_every = max(1, max_steps // 20)
     success_radius = config["target"]["success_radius"]
 
     if verbose:
         print("Starting person-follower simulation...")
         print(f"  Physics rate: {1.0 / sim_dt:.0f} Hz")
-        print(f"  Control rate: {1.0 / (sim_dt * control_every):.0f} Hz")
+        print(f"  Control rate: {1.0 / control_dt:.0f} Hz")
         print(f"  Max steps: {max_steps}")
+        print(f"  State source: estimator (odometry + IMU)")
 
     viewer = None
     if gui:
@@ -74,26 +85,43 @@ def run_simulation(config: dict, gui: bool = False, verbose: bool = True) -> boo
             safety.heartbeat(sim_time)
 
             if step % control_every == 0:
-                target.step(sim_dt * control_every)
+                # Move the target
+                target_mover.step(control_dt)
 
-                target_meas = io.read_target()
-                obs_meas = io.read_obstacles()
-                vel = io.read_velocity()
+                # --- Read raw sensors ---
+                wheels = io.read_wheels()
+                imu = io.read_imu()
 
-                robot_pos = io.read_pose()
-                target_pos = target.get_position()
-                dist = distance_2d((robot_pos.x, robot_pos.y), target_pos)
-                at_goal = dist < success_radius
+                # --- State estimation (replaces ground-truth pose) ---
+                estimate = estimator.update(
+                    left_speed=wheels.left_speed,
+                    right_speed=wheels.right_speed,
+                    imu=imu,
+                    dt=control_dt,
+                    timestamp=sim_time,
+                )
+                est_pose = estimate.pose
 
+                # --- Pose-dependent sensors use estimated pose ---
+                target_meas = io.read_target(est_pose)
+                obs_meas = io.read_obstacles(est_pose)
+
+                # --- Goal check uses ground truth (sim-level, not controller) ---
+                true_pose = io.get_true_pose()
+                target_pos = target_mover.get_position()
+                true_dist = distance_2d((true_pose.x, true_pose.y), target_pos)
+                at_goal = true_dist < success_radius
+
+                # --- Behavior arbitration ---
                 cmd = behavior.update(
                     target=target_meas,
                     obstacles=obs_meas,
-                    robot_speed=vel.linear,
+                    robot_speed=estimate.twist.linear,
                     target_reached=at_goal,
                     sim_time=sim_time,
                 )
 
-                status = safety.check(vel.linear, sim_time)
+                status = safety.check(estimate.twist.linear, sim_time)
                 cmd = safety.gate_command(cmd, status)
                 io.send_wheel_command(cmd)
 
@@ -104,12 +132,18 @@ def run_simulation(config: dict, gui: bool = False, verbose: bool = True) -> boo
                 _time.sleep(1 / 240)
 
             if verbose and step % report_every == 0:
-                p = io.read_pose()
-                tp = target.get_position()
-                d = distance_2d((p.x, p.y), tp)
+                true_p = io.get_true_pose()
+                est_p = estimator._odom.pose  # for debug comparison
+                tp = target_mover.get_position()
+                d = distance_2d((true_p.x, true_p.y), tp)
+                drift = distance_2d((true_p.x, true_p.y), (est_p.x, est_p.y))
                 print(
-                    f"step {step:6d} | robot=({p.x:5.2f}, {p.y:5.2f}) | "
-                    f"target=({tp[0]:5.2f}, {tp[1]:5.2f}) | dist={d:.2f}m | "
+                    f"step {step:6d} | "
+                    f"true=({true_p.x:5.2f}, {true_p.y:5.2f}) | "
+                    f"est=({est_p.x:5.2f}, {est_p.y:5.2f}) | "
+                    f"drift={drift:.3f}m | "
+                    f"target=({tp[0]:5.2f}, {tp[1]:5.2f}) | "
+                    f"dist={d:.2f}m | "
                     f"state={behavior.state.name}"
                 )
 
@@ -122,7 +156,11 @@ def run_simulation(config: dict, gui: bool = False, verbose: bool = True) -> boo
 
     if verbose:
         t = step * sim_dt
+        true_p = io.get_true_pose()
+        est_p = estimator._odom.pose
+        drift = distance_2d((true_p.x, true_p.y), (est_p.x, est_p.y))
         print(f"{'Target reached' if reached else 'Simulation ended'} at step {step} (t={t:.1f}s)")
+        print(f"  Final odometry drift: {drift:.3f}m")
 
     return reached
 

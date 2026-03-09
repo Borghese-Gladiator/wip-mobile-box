@@ -1,6 +1,17 @@
 # Log
 Log for Learning + Issues encountered
 
+**03/08**
+
+(late night coding sessions)
+- decided to use an actual physics engine for robot follower simulations 
+  - PyBullet - python native and easy to use -> decided against since no wheels, so it doesn't install easily (requires re-building which needs C++ Build Tooling for Windows or MacOS)
+  - MuJoCo - works!
+
+TO DO
+- Irregular polygon obstacles -> requires ray-casting
+- Hybrid slowdown + reactive turn -> alternative to map planning
+
 **02/24**
 What to build:
 * A physics simulation

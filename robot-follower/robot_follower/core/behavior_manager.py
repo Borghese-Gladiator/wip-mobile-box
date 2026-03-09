@@ -22,6 +22,7 @@ class BehaviorManager:
         avoid_weight: float = 1.5,
         escape_stall_time: float = 2.0,
         escape_turn_speed: float = 4.0,
+        control_dt: float = 0.02,
     ):
         self.follower = follower
         self.avoidance = avoidance
@@ -31,6 +32,7 @@ class BehaviorManager:
         self._avoid_weight = avoid_weight
         self._escape_stall_time = escape_stall_time
         self._escape_turn_speed = escape_turn_speed
+        self._control_dt = control_dt
         self._stall_start: float | None = None
 
     def update(
@@ -71,7 +73,7 @@ class BehaviorManager:
                     return WheelCommand(-self._escape_turn_speed, self._escape_turn_speed)
 
         # Normal: blend follow + avoid
-        follow = self.follower.compute(target)
+        follow = self.follower.compute(target, dt=self._control_dt)
         avoid = self.avoidance.compute(obstacles)
 
         danger = max(obstacles.front, obstacles.front_left, obstacles.front_right)

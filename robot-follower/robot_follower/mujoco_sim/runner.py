@@ -29,6 +29,11 @@ def run_simulation(config: dict, gui: bool = False, verbose: bool = True) -> boo
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
 
+    # Timing constants
+    sim_dt = model.opt.timestep
+    control_every = 20  # ~50 Hz at 1 kHz physics
+    control_dt = sim_dt * control_every
+
     # Build subsystems
     rc = config["robot"]
     bc = config["behavior"]
@@ -43,7 +48,11 @@ def run_simulation(config: dict, gui: bool = False, verbose: bool = True) -> boo
     # Seed estimator with the initial ground-truth pose (like a GPS fix at boot)
     estimator.reset(io.get_true_pose())
 
-    follower = FollowerController(base_speed=3.0, steering_gain=6.0)
+    follow_band = config["target"].get("follow_band", [1.0, 3.0])
+    follow_distance = (follow_band[0] + follow_band[1]) / 2.0
+    follower = FollowerController(
+        base_speed=3.0, steering_gain=6.0, follow_distance=follow_distance,
+    )
     avoidance = ObstacleAvoidance(base_speed=3.0)
     wheel_ctrl = WheelController(
         wheel_radius=rc["wheel_radius"],
@@ -57,13 +66,11 @@ def run_simulation(config: dict, gui: bool = False, verbose: bool = True) -> boo
         avoid_weight=bc["avoid_weight"],
         escape_stall_time=bc["escape_stall_time"],
         escape_turn_speed=bc["escape_turn_speed"],
+        control_dt=control_dt,
     )
     safety = SafetyManager()
 
     max_steps = config["simulation"]["max_steps"]
-    sim_dt = model.opt.timestep
-    control_every = 20  # ~50 Hz at 1 kHz physics
-    control_dt = sim_dt * control_every
     report_every = max(1, max_steps // 20)
     success_radius = config["target"]["success_radius"]
 

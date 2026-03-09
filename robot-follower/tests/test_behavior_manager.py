@@ -21,9 +21,10 @@ def behavior():
     )
 
 
-def _target(strength=0.5, bearing=0.0, valid=True, stale=False):
+def _target(strength=0.5, bearing=0.0, distance=3.0, valid=True, stale=False):
     return TargetMeasurement(
         signal_strength=strength, bearing=bearing,
+        distance_estimate=distance,
         valid=valid, stale=stale,
     )
 

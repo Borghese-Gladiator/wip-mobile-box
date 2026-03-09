@@ -1,16 +1,16 @@
-"""Tests for target tracker RSSI and bearing computation."""
+"""Tests for RSSI model and bearing computation (pure math, no MuJoCo)."""
 
 import math
 import pytest
-from robot_follower.utils import bearing_to
+from robot_follower.core.math_utils import bearing_to
 
 
 class TestRSSIModel:
-    """Test the RSSI distance-to-signal model logic (without MuJoCo)."""
+    """Test the RSSI distance-to-signal model logic."""
 
     @pytest.mark.parametrize("dist,expected_stronger", [
-        (1.0, True),   # close = stronger
-        (10.0, False),  # far = weaker
+        (1.0, True),
+        (10.0, False),
     ])
     def test_rssi_distance_relationship(self, dist, expected_stronger):
         ref_power = -40.0

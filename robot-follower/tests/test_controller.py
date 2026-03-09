@@ -1,53 +1,72 @@
-"""Tests for the motion controller."""
+"""Tests for follower controller and wheel controller."""
 
 import math
 import pytest
-from robot_follower.controller import Controller
-from robot_follower.utils import load_config
+from robot_follower.core.types import TargetMeasurement, Twist2D
+from robot_follower.core.follower_controller import FollowerController
+from robot_follower.core.wheel_controller import WheelController
 
 
 @pytest.fixture
-def controller():
-    config = load_config()
-    return Controller(config)
+def follower():
+    return FollowerController(base_speed=3.0, steering_gain=6.0)
 
 
-class TestFollowCompute:
-    def test_target_ahead_gives_forward(self, controller):
-        fwd, turn = controller.compute_follow(bearing=0.0, signal_strength=0.5)
-        assert fwd > 0.3
-        assert abs(turn) < 0.1
-
-    def test_target_left_gives_left_turn(self, controller):
-        fwd, turn = controller.compute_follow(bearing=0.5, signal_strength=0.5)
-        assert turn > 0.5  # positive = turn left
-
-    def test_target_right_gives_right_turn(self, controller):
-        fwd, turn = controller.compute_follow(bearing=-0.5, signal_strength=0.5)
-        assert turn < -0.5
-
-    def test_close_target_slows_down(self, controller):
-        fwd_far, _ = controller.compute_follow(bearing=0.0, signal_strength=0.3)
-        fwd_close, _ = controller.compute_follow(bearing=0.0, signal_strength=0.95)
-        assert fwd_close < fwd_far
+@pytest.fixture
+def wheel_ctrl():
+    return WheelController(wheel_radius=0.04, wheelbase=0.22, max_wheel_speed=10.0)
 
 
-class TestWheelMixing:
-    @pytest.mark.parametrize("forward,turn,left_gt_right", [
-        (0.5, 0.0, None),   # straight: equal
-        (0.5, 0.5, False),  # turn left: right > left
-        (0.5, -0.5, True),  # turn right: left > right
+class TestFollowerController:
+    def test_target_ahead_gives_forward(self, follower):
+        t = TargetMeasurement(signal_strength=0.5, bearing=0.0, valid=True)
+        twist = follower.compute(t)
+        assert twist.linear > 1.0
+        assert abs(twist.angular) < 0.1
+
+    def test_target_left_gives_left_turn(self, follower):
+        t = TargetMeasurement(signal_strength=0.5, bearing=0.5, valid=True)
+        twist = follower.compute(t)
+        assert twist.angular > 1.0
+
+    def test_target_right_gives_right_turn(self, follower):
+        t = TargetMeasurement(signal_strength=0.5, bearing=-0.5, valid=True)
+        twist = follower.compute(t)
+        assert twist.angular < -1.0
+
+    def test_close_target_slows_down(self, follower):
+        far = TargetMeasurement(signal_strength=0.3, bearing=0.0, valid=True)
+        close = TargetMeasurement(signal_strength=0.95, bearing=0.0, valid=True)
+        assert follower.compute(close).linear < follower.compute(far).linear
+
+    def test_invalid_target_returns_zero(self, follower):
+        t = TargetMeasurement(valid=False)
+        twist = follower.compute(t)
+        assert twist.linear == 0.0
+        assert twist.angular == 0.0
+
+    def test_stale_target_returns_zero(self, follower):
+        t = TargetMeasurement(valid=True, stale=True, bearing=0.3, signal_strength=0.5)
+        twist = follower.compute(t)
+        assert twist.linear == 0.0
+
+
+class TestWheelController:
+    @pytest.mark.parametrize("lin,ang,left_gt_right", [
+        (0.1, 0.0, None),    # straight: equal
+        (0.1, 1.0, False),   # turn left: right > left
+        (0.1, -1.0, True),   # turn right: left > right
     ])
-    def test_mixing(self, controller, forward, turn, left_gt_right):
-        left, right = controller.mix_to_wheels(forward, turn)
+    def test_mixing(self, wheel_ctrl, lin, ang, left_gt_right):
+        cmd = wheel_ctrl.compute(Twist2D(linear=lin, angular=ang))
         if left_gt_right is None:
-            assert left == pytest.approx(right, abs=0.05)
+            assert cmd.left == pytest.approx(cmd.right, abs=0.1)
         elif left_gt_right:
-            assert left > right
+            assert cmd.left > cmd.right
         else:
-            assert right > left
+            assert cmd.right > cmd.left
 
-    def test_velocity_in_range(self, controller):
-        left, right = controller.mix_to_wheels(100.0, 50.0)
-        assert -10.0 <= left <= 10.0
-        assert -10.0 <= right <= 10.0
+    def test_velocity_clamped(self, wheel_ctrl):
+        cmd = wheel_ctrl.compute(Twist2D(linear=100.0, angular=50.0))
+        assert -10.0 <= cmd.left <= 10.0
+        assert -10.0 <= cmd.right <= 10.0

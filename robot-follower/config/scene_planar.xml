@@ -1,0 +1,106 @@
+<mujoco model="person_follower">
+  <compiler angle="radian" autolimits="true"/>
+
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="implicitfast"/>
+
+  <default>
+    <geom condim="3" friction="1.0 0.005 0.001"/>
+  </default>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3"/>
+    <quality shadowsize="2048"/>
+    <rgba fog="0.1 0.1 0.12 1" haze="0.1 0.1 0.12 1"/>
+    <global fovy="45" azimuth="120" elevation="-20"/>
+    <map fogstart="5" fogend="25"/>
+  </visual>
+
+  <worldbody>
+    <!-- Lighting -->
+    <light name="overhead" pos="0 0 8" dir="0 0 -1" diffuse="1.0 1.0 1.0"
+           specular="0.4 0.4 0.4" castshadow="true"/>
+
+    <!-- Floor -->
+    <geom name="floor" type="plane" size="10 10 0.01" rgba="0.15 0.15 0.18 1"
+          condim="4" friction="1.5 0.005 0.001"/>
+
+    <!-- Room walls (10m x 10m) -->
+    <geom name="wall_north" type="box" size="5 0.05 0.5" pos="0 5 0.5"
+          rgba="0.35 0.35 0.4 1"/>
+    <geom name="wall_south" type="box" size="5 0.05 0.5" pos="0 -5 0.5"
+          rgba="0.35 0.35 0.4 1"/>
+    <geom name="wall_east" type="box" size="0.05 5 0.5" pos="5 0 0.5"
+          rgba="0.35 0.35 0.4 1"/>
+    <geom name="wall_west" type="box" size="0.05 5 0.5" pos="-5 0 0.5"
+          rgba="0.35 0.35 0.4 1"/>
+
+    <!-- Obstacles -->
+    <geom name="pillar1" type="cylinder" size="0.3 0.5" pos="1.5 1.5 0.5"
+          rgba="0.6 0.4 0.2 1"/>
+    <geom name="wall_seg1" type="box" size="0.8 0.05 0.4" pos="-1.5 -1.0 0.4"
+          rgba="0.45 0.42 0.38 1"/>
+    <geom name="wall_seg2" type="box" size="0.05 0.5 0.4" pos="-2.25 -0.55 0.4"
+          rgba="0.45 0.42 0.38 1"/>
+    <geom name="box1" type="box" size="0.25 0.25 0.3" pos="2.5 -2.0 0.3"
+          rgba="0.35 0.5 0.3 1"/>
+    <geom name="box2" type="box" size="0.2 0.4 0.25" pos="-3.0 2.5 0.25"
+          rgba="0.4 0.3 0.5 1"/>
+
+    <!-- ===== ROBOT ===== -->
+    <body name="robot" pos="0 0 0.065">
+      <freejoint name="robot_free"/>
+      <inertial pos="0 0 0" mass="1.0" diaginertia="0.004 0.002 0.004"/>
+      <geom name="chassis" type="box" size="0.15 0.10 0.025" rgba="0.3 0.5 0.95 1"/>
+      <geom name="front_marker" type="box" size="0.02 0.04 0.03" pos="0.13 0 0"
+            rgba="1 0.3 0.1 1" contype="0" conaffinity="0"/>
+
+      <!-- Left wheel -->
+      <body name="left_wheel" pos="0 0.11 -0.025">
+        <joint name="left_wheel_joint" type="hinge" axis="0 1 0" damping="0.001"/>
+        <inertial pos="0 0 0" mass="0.1" diaginertia="0.00008 0.00004 0.00004"/>
+        <geom name="left_wheel_geom" type="cylinder" size="0.04 0.01"
+              euler="1.5708 0 0" rgba="0.1 0.1 0.1 1"
+              condim="4" friction="1.5 0.005 0.001" priority="1"/>
+      </body>
+
+      <!-- Right wheel -->
+      <body name="right_wheel" pos="0 -0.11 -0.025">
+        <joint name="right_wheel_joint" type="hinge" axis="0 1 0" damping="0.001"/>
+        <inertial pos="0 0 0" mass="0.1" diaginertia="0.00008 0.00004 0.00004"/>
+        <geom name="right_wheel_geom" type="cylinder" size="0.04 0.01"
+              euler="1.5708 0 0" rgba="0.1 0.1 0.1 1"
+              condim="4" friction="1.5 0.005 0.001" priority="1"/>
+      </body>
+
+      <!-- Rear caster -->
+      <body name="caster" pos="-0.12 0 -0.045">
+        <inertial pos="0 0 0" mass="0.05" diaginertia="0.000004 0.000004 0.000004"/>
+        <geom name="caster_geom" type="sphere" size="0.02"
+              rgba="0.6 0.6 0.6 1" condim="1"
+              friction="0.01 0.001 0.001"/>
+      </body>
+    </body>
+
+    <!-- ===== TARGET (person-like) ===== -->
+    <body name="target" pos="3 0 0.5">
+      <freejoint name="target_free"/>
+      <geom name="target_torso" type="capsule" size="0.1 0.25"
+            rgba="0.9 0.2 0.2 1" mass="5.0"/>
+      <geom name="target_head" type="sphere" size="0.12" pos="0 0 0.37"
+            rgba="0.95 0.75 0.6 1" mass="0.5"/>
+      <site name="target_site" pos="0 0 0" size="0.02" rgba="1 1 0 0.5"/>
+    </body>
+
+    <!-- Tracking camera -->
+    <camera name="tracking" pos="0 -8 10" xyaxes="1 0 0 0 0.6 0.8" mode="fixed"/>
+    <camera name="top_down" pos="0 0 12" xyaxes="1 0 0 0 1 0" mode="fixed"/>
+  </worldbody>
+
+  <!-- Actuators for differential drive -->
+  <actuator>
+    <velocity name="left_motor" joint="left_wheel_joint" kv="0.5"
+              ctrlrange="-10 10"/>
+    <velocity name="right_motor" joint="right_wheel_joint" kv="0.5"
+              ctrlrange="-10 10"/>
+  </actuator>
+</mujoco>

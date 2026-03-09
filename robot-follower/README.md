@@ -1,42 +1,69 @@
 # Robot Follower
 
-MuJoCo simulation of a differential-drive robot that follows a person-like moving target using simulated Bluetooth signal strength (RSSI) and relative bearing, with obstacle avoidance.
+MuJoCo simulation of a differential-drive robot that follows a person-like moving target using simulated Bluetooth signal strength (RSSI) and relative bearing, with obstacle avoidance. Architected for real-world hardware portability.
 
 ## Overview
 
 A two-wheeled robot navigates a 10m x 10m room with walls and obstacles, pursuing a target that walks along waypoints. The robot uses:
 
-- **RSSI-like signal strength** — distance estimate from simulated Bluetooth
+- **RSSI-like signal strength** — distance estimate from simulated Bluetooth (with noise, delay, dropouts)
 - **Relative bearing** — direction to target from robot heading
 - **Ray-cast obstacle sensors** — front, front-left, front-right proximity
-- **Behavior arbitration** — blends follow/avoid with escape fallback
+- **Behavior arbitration** — follow / avoid / escape / search states
+- **Simulated realism** — motor mismatch, encoder quantization, IMU drift, BLE packet loss
 
 ## Project Structure
 
 ```
 robot-follower/
 ├── config/
-│   ├── scene.xml           # MuJoCo scene (robot, target, world)
-│   └── sim_config.yaml     # Runtime parameters
+│   ├── common.yaml              # Shared runtime parameters
+│   └── scene_planar.xml         # MuJoCo scene (robot, target, world)
 ├── robot_follower/
-│   ├── main.py             # Entry point & simulation loop
-│   ├── robot_interface.py  # Differential-drive control & pose
-│   ├── target_tracker.py   # RSSI + bearing sensing
-│   ├── obstacle_sensors.py # Ray-cast proximity detection
-│   ├── controller.py       # Follow/avoid → wheel velocities
-│   ├── behavior_manager.py # State machine (follow/avoid/escape)
-│   ├── sim_env.py          # Target motion & episode lifecycle
-│   ├── motion_profiles.py  # Waypoint-based target movement
-│   ├── telemetry_spec.py   # BLE telemetry schema (spec only)
-│   └── utils.py            # Angle math, config loading
+│   ├── __main__.py              # `python -m robot_follower` entry point
+│   ├── core/                    # Pure logic — no MuJoCo dependency
+│   │   ├── types.py             # Shared dataclasses (Pose2D, WheelCommand, etc.)
+│   │   ├── math_utils.py        # Angle normalization, bearing, distance
+│   │   ├── config.py            # YAML loading + merging
+│   │   ├── filters.py           # EMA, median filter, deadband, stale tracker
+│   │   ├── kinematics.py        # Differential-drive wheel ↔ twist
+│   │   ├── odometry.py          # Dead-reckoning from wheel speeds
+│   │   ├── estimator.py         # Fused state estimate (odometry + IMU)
+│   │   ├── follower_controller.py  # Bearing + RSSI → body twist
+│   │   ├── obstacle_avoidance.py   # Danger readings → avoidance twist
+│   │   ├── wheel_controller.py  # Twist → wheel commands (deadband, gain)
+│   │   ├── behavior_manager.py  # State machine (follow/avoid/escape/search)
+│   │   ├── safety_manager.py    # Watchdog, e-stop, stall detection
+│   │   ├── motion_profiles.py   # Waypoint-based target movement
+│   │   └── telemetry_spec.py    # BLE telemetry schema (spec only)
+│   ├── interfaces/
+│   │   └── robot_io.py          # Abstract RobotIO contract
+│   ├── mujoco_sim/              # MuJoCo-specific backend
+│   │   ├── runner.py            # Simulation entry point + main loop
+│   │   ├── sim_robot_io.py      # RobotIO implementation for MuJoCo
+│   │   ├── mujoco_robot.py      # MuJoCo robot state + actuator access
+│   │   ├── mujoco_sensors.py    # Raycast + BLE sensing from ground truth
+│   │   ├── mujoco_target.py     # Target body motion via qpos
+│   │   └── mujoco_noise.py      # Motor, IMU, encoder, BLE noise injection
+│   └── hardware/                # Future Raspberry Pi drivers (stubs)
 ├── tests/
 │   ├── test_utils.py
 │   ├── test_controller.py
+│   ├── test_behavior_manager.py
 │   ├── test_target_tracker.py
-│   └── test_behavior_manager.py
+│   ├── test_filters.py
+│   ├── test_kinematics.py
+│   └── test_estimator.py
 ├── pyproject.toml
 └── poetry.lock
 ```
+
+## Key Design Principle
+
+**`core/` has zero MuJoCo imports.** All robot logic (controllers, state estimation, behavior) depends only on abstract types. The same code can run against:
+
+- `mujoco_sim/` — MuJoCo simulation with noise injection
+- `hardware/` — future Raspberry Pi with real sensors (implement `RobotIO`)
 
 ## Requirements
 
@@ -55,21 +82,19 @@ poetry install
 ### Activate the Poetry virtualenv
 
 ```bash
-# Activate the venv in your current shell
 eval "$(poetry env activate)"
 ```
 
 ### Headless (no GUI)
 
 ```bash
-# Works on all platforms
-poetry run python -m robot_follower.main --headless
+poetry run python -m robot_follower --headless
 
 # Override max simulation steps
-poetry run python -m robot_follower.main --headless --max-steps 200000
+poetry run python -m robot_follower --headless --max-steps 200000
 
 # Custom config
-poetry run python -m robot_follower.main --headless --config path/to/config.yaml
+poetry run python -m robot_follower --headless --config path/to/config.yaml
 ```
 
 ### With MuJoCo viewer (GUI)
@@ -79,10 +104,10 @@ On **macOS**, MuJoCo's `launch_passive` requires the `mjpython` launcher (ships 
 ```bash
 # macOS — must use mjpython for GUI
 eval "$(poetry env activate)"
-mjpython -m robot_follower.main --gui
+mjpython -m robot_follower --gui
 
 # Linux / Windows — standard python works
-poetry run python -m robot_follower.main --gui
+poetry run python -m robot_follower --gui
 ```
 
 ### CLI Options
@@ -91,7 +116,7 @@ poetry run python -m robot_follower.main --gui
 |------|-------------|
 | `--gui` | Launch MuJoCo interactive viewer |
 | `--headless` | Run without GUI (default behavior) |
-| `--config PATH` | Path to config YAML (default: `config/sim_config.yaml`) |
+| `--config PATH` | Path to config YAML (default: `config/common.yaml`) |
 | `--max-steps N` | Override max physics steps per episode |
 
 ## Running Tests
@@ -102,7 +127,7 @@ poetry run pytest -v
 
 ## Configuration
 
-All tunable parameters are in `config/sim_config.yaml`:
+All tunable parameters are in `config/common.yaml`:
 
 | Section | Key Parameters |
 |---------|---------------|
@@ -128,11 +153,40 @@ All tunable parameters are in `config/sim_config.yaml`:
 ## Architecture
 
 ```
-Sensors ──► Behavior Manager ──► Wheel Velocities ──► MuJoCo Actuators
-              │
-              ├─ FOLLOW_TARGET:  steer toward bearing, speed from RSSI
-              ├─ AVOID_OBSTACLE: blend avoidance when rays detect danger
-              └─ ESCAPE_TRAP:    spin in place when stalled
+  RobotIO (abstract)
+     │
+     ├── SimRobotIO (MuJoCo)          ← current
+     └── HardwareRobotIO (Pi)         ← future
+          │
+          ▼
+  ┌─────────────────────────────────────────┐
+  │  core/ — hardware-agnostic logic        │
+  │                                         │
+  │  Sensors ──► StateEstimator             │
+  │                  │                      │
+  │                  ▼                      │
+  │  TargetMeas ──► BehaviorManager         │
+  │  ObstacleMeas    │                      │
+  │                  ├─ FOLLOW_TARGET        │
+  │                  ├─ AVOID_OBSTACLE       │
+  │                  ├─ ESCAPE_TRAP          │
+  │                  ├─ SEARCH_TARGET        │
+  │                  └─ TARGET_REACHED       │
+  │                  │                      │
+  │                  ▼                      │
+  │              WheelController            │
+  │                  │                      │
+  │                  ▼                      │
+  │              SafetyManager ──► WheelCmd │
+  └─────────────────────────────────────────┘
 ```
 
-The controller runs at 50 Hz (every 20 physics steps). Target motion is updated at the same rate via waypoint interpolation.
+## Simulated Realism
+
+The MuJoCo backend injects real-world imperfections:
+
+- **Motor noise**: left/right gain mismatch (97%), response lag
+- **Encoder noise**: tick quantization (1440 tpr), occasional missed ticks
+- **IMU noise**: gyro bias drift, Gaussian noise
+- **BLE noise**: RSSI jitter, bearing noise, packet delay (2 steps), 5% drop rate
+- **Wheel controller**: deadband threshold, per-motor gain scaling

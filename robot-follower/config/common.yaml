@@ -1,0 +1,45 @@
+# Simulation configuration
+simulation:
+  timestep: 0.001          # MuJoCo timestep (s) — 1 kHz physics
+  max_steps: 120000        # Max physics steps per episode
+  render: true
+
+robot:
+  wheel_radius: 0.04       # m
+  wheelbase: 0.22          # m (distance between wheels)
+  max_wheel_speed: 10.0    # rad/s — matches actuator ctrlrange
+
+target:
+  success_radius: 0.5      # m — "reached" distance
+  follow_band: [1.0, 3.0]  # ideal following range (m)
+  motion_profile: "waypoint"
+
+sensing:
+  rssi:
+    ref_power: -40.0        # dBm at 1m
+    path_loss_exp: 2.5      # path loss exponent
+    noise_std: 2.0          # dBm noise
+  bearing:
+    noise_std: 0.05         # radians
+  obstacle:
+    ray_length: 1.0         # m
+    num_rays: 5             # rays per sensor zone
+    danger_threshold: 0.4   # normalized
+
+behavior:
+  avoid_weight: 1.5         # weight relative to follow
+  escape_stall_time: 2.0    # seconds before escape triggers
+  escape_turn_speed: 4.0    # rad/s during escape (wheel velocity)
+
+motion_profiles:
+  waypoint:
+    speed: 0.6              # m/s
+    speed_variation: 0.15
+    turn_smoothing: 0.3     # interpolation factor
+    waypoints:
+      - [3.0, 0.0]
+      - [3.0, 3.0]
+      - [-2.0, 3.0]
+      - [-2.0, -2.0]
+      - [2.0, -2.0]
+      - [3.0, 0.0]

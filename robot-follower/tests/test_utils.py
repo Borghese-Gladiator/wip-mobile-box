@@ -1,8 +1,8 @@
-"""Tests for utility functions."""
+"""Tests for core math utilities."""
 
 import math
 import pytest
-from robot_follower.utils import normalize_angle, clamp, bearing_to, distance_2d
+from robot_follower.core.math_utils import normalize_angle, clamp, bearing_to, distance_2d
 
 
 class TestNormalizeAngle:
@@ -33,16 +33,13 @@ class TestClamp:
 
 class TestBearingTo:
     def test_target_directly_ahead(self):
-        bearing = bearing_to((0.0, 0.0), 0.0, (1.0, 0.0))
-        assert bearing == pytest.approx(0.0, abs=1e-10)
+        assert bearing_to((0, 0), 0.0, (1, 0)) == pytest.approx(0.0, abs=1e-10)
 
     def test_target_to_left(self):
-        bearing = bearing_to((0.0, 0.0), 0.0, (0.0, 1.0))
-        assert bearing == pytest.approx(math.pi / 2, abs=1e-10)
+        assert bearing_to((0, 0), 0.0, (0, 1)) == pytest.approx(math.pi / 2, abs=1e-10)
 
     def test_target_behind(self):
-        bearing = bearing_to((0.0, 0.0), 0.0, (-1.0, 0.0))
-        assert abs(bearing) == pytest.approx(math.pi, abs=1e-10)
+        assert abs(bearing_to((0, 0), 0.0, (-1, 0))) == pytest.approx(math.pi, abs=1e-10)
 
 
 class TestDistance2D:

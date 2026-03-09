@@ -1,11 +1,8 @@
-"""Shared utility functions."""
+"""Pure math utilities — no external dependencies beyond stdlib."""
 
 from __future__ import annotations
 
 import math
-from pathlib import Path
-
-import yaml
 
 
 def normalize_angle(angle: float) -> float:
@@ -18,25 +15,14 @@ def normalize_angle(angle: float) -> float:
 
 
 def clamp(value: float, lo: float, hi: float) -> float:
-    """Clamp value to [lo, hi]."""
     return max(lo, min(hi, value))
 
 
 def lerp(a: float, b: float, t: float) -> float:
-    """Linear interpolation from a to b by factor t."""
     return a + (b - a) * clamp(t, 0.0, 1.0)
 
 
-def load_config(path: str | Path | None = None) -> dict:
-    """Load sim_config.yaml. Defaults to config/sim_config.yaml relative to project root."""
-    if path is None:
-        path = Path(__file__).parent.parent / "config" / "sim_config.yaml"
-    with open(path) as f:
-        return yaml.safe_load(f)
-
-
 def distance_2d(a: tuple[float, float], b: tuple[float, float]) -> float:
-    """Euclidean distance in 2D."""
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
@@ -50,3 +36,10 @@ def bearing_to(
     dy = to_pos[1] - from_pos[1]
     absolute_angle = math.atan2(dy, dx)
     return normalize_angle(absolute_angle - from_heading)
+
+
+def quat_to_yaw(qw: float, qx: float, qy: float, qz: float) -> float:
+    """Extract yaw from quaternion (w, x, y, z)."""
+    siny_cosp = 2.0 * (qw * qz + qx * qy)
+    cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
+    return math.atan2(siny_cosp, cosy_cosp)
